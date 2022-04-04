@@ -42,7 +42,7 @@ func NewPaymentGen() *Payment {
 	return &Payment{Transaction: "transaction" + strconv.Itoa(i), RequestID: "requestID" + strconv.Itoa(i), Currency: "currency" + strconv.Itoa(i), Provider: "provider" + strconv.Itoa(i), Amount: i, PaymentDt: i, Bank: "bank" + strconv.Itoa(i), DeliveryCost: i, GoodsTotal: i, CustomFee: i}
 }
 
-type Items struct {
+type Item struct {
 	ChrtID      int    `json:"chrt_id"`
 	TrackNumber string `json:"track_number"`
 	Price       int    `json:"price"`
@@ -56,18 +56,18 @@ type Items struct {
 	Status      int    `json:"status"`
 }
 
-func NewItemsGen() *Items {
+func NewItemGen() *Item {
 	var i = rand.Int()
-	return &Items{ChrtID: i, TrackNumber: "trackNumber" + strconv.Itoa(i), Price: i, Rid: "rid" + strconv.Itoa(i), Name: "name" + strconv.Itoa(i), Sale: i, Size: "size" + strconv.Itoa(i), TotalPrice: i, NmID: i, Brand: "brand" + strconv.Itoa(i), Status: i}
+	return &Item{ChrtID: i, TrackNumber: "trackNumber" + strconv.Itoa(i), Price: i, Rid: "rid" + strconv.Itoa(i), Name: "name" + strconv.Itoa(i), Sale: i, Size: "size" + strconv.Itoa(i), TotalPrice: i, NmID: i, Brand: "brand" + strconv.Itoa(i), Status: i}
 }
 
 type Str struct {
 	OrderUID          string    `json:"order_uid"`
 	TrackNumber       string    `json:"track_number"`
 	Entry             string    `json:"entry"`
-	D                 Delivery  `json:"delivery"`
-	P                 Payment   `json:"payment"`
-	I                 []Items   `json:"items"`
+	Deliveries        Delivery  `json:"delivery"`
+	Pays              Payment   `json:"payment"`
+	Items             []Item    `json:"items"`
 	Locale            string    `json:"locale"`
 	InternalSignature string    `json:"internal_signature"`
 	CustomerID        string    `json:"customer_id"`
@@ -82,13 +82,13 @@ func NewStrGen() *Str {
 	var i = rand.Int()
 	var D = NewDeliveryGen()
 	var P = NewPaymentGen()
-	var I1, I2, I3 = NewItemsGen(), NewItemsGen(), NewItemsGen()
-	var I = []Items{*I1, *I2, *I3}
-	return &Str{OrderUID: "orderUID" + strconv.Itoa(i), TrackNumber: "trackNumber" + strconv.Itoa(i), Entry: "entry" + strconv.Itoa(i), D: *D, P: *P, I: I, Locale: "locale" + strconv.Itoa(i), InternalSignature: "internalSignature" + strconv.Itoa(i), CustomerID: "customerID" + strconv.Itoa(i), DeliveryService: "deliveryService" + strconv.Itoa(i), Shardkey: "shardkey" + strconv.Itoa(i), SmID: i, DateCreated: time.Now().Add(time.Duration(i) * time.Millisecond), OofShard: "oofShard" + strconv.Itoa(i)}
+	var I1, I2, I3 = NewItemGen(), NewItemGen(), NewItemGen()
+	var I = []Item{*I1, *I2, *I3}
+	return &Str{OrderUID: "orderUID" + strconv.Itoa(i), TrackNumber: "trackNumber" + strconv.Itoa(i), Entry: "entry" + strconv.Itoa(i), Deliveries: *D, Pays: *P, Items: I, Locale: "locale" + strconv.Itoa(i), InternalSignature: "internalSignature" + strconv.Itoa(i), CustomerID: "customerID" + strconv.Itoa(i), DeliveryService: "deliveryService" + strconv.Itoa(i), Shardkey: "shardkey" + strconv.Itoa(i), SmID: i, DateCreated: time.Now().Add(time.Duration(i) * time.Millisecond), OofShard: "oofShard" + strconv.Itoa(i)}
 }
 
 //кэширование честно сжиженое с хабра и переписанное со времени на количество(?)
-type Item struct {
+type ItemForCache struct {
 	Value      interface{}
 	Created    time.Time
 	Expiration int64
@@ -97,11 +97,11 @@ type Cache struct {
 	sync.RWMutex
 	defaultExpiration time.Duration
 	cleanupInterval   time.Duration
-	items             map[string]Item
+	items             map[string]ItemForCache
 }
 
 func NewCatch(defaultExpiration, cleanupInterval time.Duration) *Cache {
-	items := make(map[string]Item)
+	items := make(map[string]ItemForCache)
 	cache := Cache{
 		items:             items,
 		defaultExpiration: defaultExpiration,
@@ -124,7 +124,7 @@ func (c *Cache) Set(key string, value interface{}, duration time.Duration) {
 	}
 	c.Lock()
 	defer c.Unlock()
-	c.items[key] = Item{
+	c.items[key] = ItemForCache{
 		Value:      value,
 		Expiration: expiration,
 		Created:    time.Now(),
@@ -193,4 +193,13 @@ func (c *Cache) clearItems(keys []string) {
 
 type Database struct {
 	cache *Cache
+}
+
+// чисто красивая структура для подключения к бд через pgx
+type Connector struct {
+	Uname  string
+	Pass   string
+	Host   string
+	Port   string
+	Dbname string
 }
