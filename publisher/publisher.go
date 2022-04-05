@@ -30,7 +30,7 @@ func main() {
 			err = nil
 		}
 		fmt.Println(i)
-		time.Sleep(5 * time.Second)
+		time.Sleep(time.Minute)
 	}
 	signalChan := make(chan os.Signal, 1)
 	cleanupDone := make(chan interface{})
