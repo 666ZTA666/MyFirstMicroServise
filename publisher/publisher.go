@@ -30,7 +30,7 @@ func main() {
 			err = nil
 		}
 		fmt.Println(i)
-		time.Sleep(time.Minute)
+		time.Sleep(30 * time.Second)
 	}
 	signalChan := make(chan os.Signal, 1)
 	cleanupDone := make(chan interface{})
@@ -38,7 +38,10 @@ func main() {
 	go func() {
 		for range signalChan {
 			fmt.Printf("\nReceived an interrupt, closing connection...\n")
-			sc.Close()
+			err = sc.Close()
+			if err != nil {
+				fmt.Println(time.Now(), "Closing connection error:", err)
+			}
 			close(cleanupDone)
 		}
 	}()
