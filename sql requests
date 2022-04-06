@@ -25,6 +25,22 @@ CREATE TABLE payment
     CustomFee bigint
 );
 
+CREATE TABLE  item
+(
+    ChrtID BIGINT NOT NULL primary key,
+    TrackNumber VARCHAR (50),
+    Price BIGINT,
+    Rid VARCHAR (50),
+    Item_name VARCHAR (50),
+    Sale bigint,
+    Size VARCHAR (50),
+    TotalPrice bigint,
+    NmID bigint,
+    Brand VARCHAR (50),
+    Status bigint,
+);
+
+
 CREATE TABLE orders
 (
     OrderUID VARCHAR(50) not null PRIMARY KEY ,
@@ -45,22 +61,4 @@ CREATE TABLE orders
     SmID bigint,
     DateCreated timestamp,
     OofShard varchar(50)
-);
-
-CREATE TABLE  items
-(
-    ChrtID BIGINT NOT NULL primary key,
-    TrackNumber VARCHAR (50),
-    Price BIGINT,
-    Rid VARCHAR (50),
-    Item_name VARCHAR (50),
-    Sale bigint,
-    Size VARCHAR (50),
-    TotalPrice bigint,
-    NmID bigint,
-    Brand VARCHAR (50),
-    Status bigint,
-    Orderid varchar(50) not null,
-    FOREIGN KEY (Orderid)
-        references orders (OrderUID)
 );

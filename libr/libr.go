@@ -74,7 +74,8 @@ type Item struct {
 // что он возвращает массив структур Item заданной длины.
 func NewItemsGen(number int) []Item {
 	It := make([]Item, number)
-	for number-1 > 0 {
+	number--
+	for number > 0 {
 		var i = rand.Int()
 		It[number] = Item{ChrtID: i, TrackNumber: "trackNumber" + strconv.Itoa(i), Price: i, Rid: "rid" + strconv.Itoa(i), Name: "name" + strconv.Itoa(i), Sale: i, Size: "size" + strconv.Itoa(i), TotalPrice: i, NmID: i, Brand: "brand" + strconv.Itoa(i), Status: i}
 		number--
@@ -280,13 +281,16 @@ func (o *Skz) FromDbToCacheByKey() error {
 		return fmt.Errorf("key is empty")
 	}
 	var DelId, PayId string
-	query := "Select (TrackNumber, Entry, Deliveries, Pays, Items, Locale, InternalSignature, CustomerID, DeliveryService, Shardkey, SmID, DateCreated, OofShard) from orders where orderUID = $1"
-	rows, err := o.Pool.Query(context.TODO(), query, o.Zakaz.OrderUID)
+	query := `
+		Select TrackNumber, Entry, Deliveries, Pays, Items, Locale, InternalSignature, CustomerID, DeliveryService, Shardkey, SmID, DateCreated, OofShard 
+		from orders 
+		where orderUID = '` + fmt.Sprint(o.Zakaz.OrderUID, "'")
+	rows, err := o.Pool.Query(context.TODO(), query)
 	if err != nil {
 		fmt.Println(time.Now(), "Select from Order failed:", err)
 		return err
 	}
-	it := make([]int, 100)
+	it := make([]int, 0)
 	for rows.Next() {
 		err = rows.Scan(&o.Zakaz.TrackNumber, &o.Zakaz.Entry, &DelId, &PayId, &it, &o.Zakaz.Locale, &o.Zakaz.InternalSignature, &o.Zakaz.CustomerID, &o.Zakaz.DeliveryService, &o.Zakaz.Shardkey, &o.Zakaz.SmID, &o.Zakaz.DateCreated, &o.Zakaz.OofShard)
 		if err != nil {
@@ -294,28 +298,34 @@ func (o *Skz) FromDbToCacheByKey() error {
 			return err
 		}
 	}
-	fmt.Println(time.Now(), "Order =", o.Zakaz.OrderUID)
+	fmt.Println(time.Now(), "OrderUid =", o.Zakaz.OrderUID)
 
-	query = "Select (ChrtID, TrackNumber, Price, Rid, Item_name, Sale, Size, TotalPrice, NmID, Brand, Status) from items where orderid = $1"
-	rows, err = o.Pool.Query(context.TODO(), query, o.Zakaz.OrderUID)
-	if err != nil {
-		fmt.Println(time.Now(), "Select from Items failed:", err)
-		return err
-	}
-	for rows.Next() {
-		var j int
-		var i Item
-		err = rows.Scan(&i.ChrtID, &i.TrackNumber, &i.Price, &i.Rid, &i.Name, &i.Sale, &i.Size, &i.TotalPrice, &i.NmID, &i.Brand, &i.Status)
+	for i := 0; i < len(it); i++ {
+		query = `Select 
+		chrtid, TrackNumber, Price, Rid, Item_name, Sale, Size, TotalPrice, NmID, Brand, Status 
+		from item 
+		where chrtid = '` + fmt.Sprint(it[i], "'")
+		rows, err = o.Pool.Query(context.TODO(), query)
 		if err != nil {
-			fmt.Println(time.Now(), "Scanning rows from selected items failed:", err)
+			fmt.Println(time.Now(), "Select from Items failed:", err)
 			return err
 		}
-		o.Zakaz.Items = append(o.Zakaz.Items, i)
-		fmt.Println(time.Now(), "item =", o.Zakaz.Items[j].ChrtID)
-		j++
+		for rows.Next() {
+			var utem Item
+			err = rows.Scan(&utem.ChrtID, &utem.TrackNumber, &utem.Price, &utem.Rid, &utem.Name, &utem.Sale, &utem.Size, &utem.TotalPrice, &utem.NmID, &utem.Brand, &utem.Status)
+			if err != nil {
+				fmt.Println(time.Now(), "Scanning rows from selected items failed:", err)
+				return err
+			}
+			o.Zakaz.Items = append(o.Zakaz.Items, utem)
+			fmt.Println(time.Now(), "Item =", o.Zakaz.Items[i].ChrtID, "Index =", i)
+		}
 	}
-	query = "Select (del_name, Phone, Zip, City, Address, Region, Email) from delivery where del_id = $1"
-	rows, err = o.Pool.Query(context.TODO(), query, DelId)
+	query = `Select 
+		del_name, Phone, Zip, City, Address, Region, Email 
+		from delivery 
+		where del_id = '` + fmt.Sprint(DelId, "'")
+	rows, err = o.Pool.Query(context.TODO(), query)
 	if err != nil {
 		fmt.Println(time.Now(), "Select from Delivery failed:", err)
 		return err
@@ -327,10 +337,12 @@ func (o *Skz) FromDbToCacheByKey() error {
 			return err
 		}
 	}
-	fmt.Println(time.Now(), "delivery =", DelId)
-
-	query = "select (Transaction, RequestID, Currency, Provider, Amount, PaymentDt, Bank, DeliveryCost, GoodsTotal, CustomFee) From payment where pay_id = $1"
-	rows, err = o.Pool.Query(context.TODO(), query, PayId)
+	fmt.Println(time.Now(), "Delivery =", DelId)
+	query = `select 
+		Transaction, RequestID, Currency, Provider, Amount, PaymentDt, Bank, DeliveryCost, GoodsTotal, CustomFee
+		from payment 
+		where pay_id = '` + fmt.Sprint(PayId, "'")
+	rows, err = o.Pool.Query(context.TODO(), query)
 	if err != nil {
 		fmt.Println(time.Now(), "Select from Payment failed:", err)
 		return err
@@ -342,14 +354,17 @@ func (o *Skz) FromDbToCacheByKey() error {
 			return err
 		}
 	}
-	fmt.Println(time.Now(), "payment =", PayId)
+	fmt.Println(time.Now(), "Payment =", PayId)
 	o.Cash.Set(o.Zakaz.OrderUID, o.Zakaz, 5*time.Minute)
 	return nil
 }
 
 //InitSomeCache метод для подгрузки кэша из БД, при запуске работы приложения.
 func (o *Skz) InitSomeCache() error {
-	query := "select orderuid from orders limit (select count(orderuid) from orders)/2"
+	query := `select orderuid 
+		from orders 
+		limit 
+		((select count(orderuid)from orders)/2)`
 	rows, err := o.Pool.Query(context.TODO(), query)
 	if err != nil {
 		fmt.Println(time.Now(), "Query error:", err)
@@ -410,7 +425,7 @@ func (o *Skz) MesageHandler(m *stan.Msg) {
 	fmt.Println(time.Now(), "Order =", ResultOrder)
 
 	for j := 0; j < len(o.Zakaz.Items); j++ {
-		query = "INSERT INTO items (ChrtID, TrackNumber, Price, Rid, Item_name, Sale, Size, TotalPrice, NmID, Brand, Status, Orderid)	Values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning ChrtID"
+		query = "INSERT INTO item (ChrtID, TrackNumber, Price, Rid, Item_name, Sale, Size, TotalPrice, NmID, Brand, Status, Orderid)	Values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning ChrtID"
 		err = o.Pool.QueryRow(context.TODO(), query, o.Zakaz.Items[j].ChrtID, o.Zakaz.Items[j].TrackNumber, o.Zakaz.Items[j].Price, o.Zakaz.Items[j].Rid, o.Zakaz.Items[j].Name, o.Zakaz.Items[j].Sale, o.Zakaz.Items[j].Size, o.Zakaz.Items[j].TotalPrice, o.Zakaz.Items[j].NmID, o.Zakaz.Items[j].Brand, o.Zakaz.Items[j].Status, o.Zakaz.OrderUID).Scan(&ResultItems)
 		if err != nil {
 			fmt.Println(time.Now(), "Insert to Items failed:", err)

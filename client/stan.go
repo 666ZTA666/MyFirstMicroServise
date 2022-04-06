@@ -18,13 +18,6 @@ func main() {
 	var ServStruck = libr.NewSkz(libr.Connector{Uname: "postgres", Pass: "postgres", Host: "localhost", Port: "5432", Dbname: "wbbase"}, 15*time.Minute, 3*time.Minute)
 	// собираем из структуры строку для подключения к бд
 	StringOfConnectionToDataBase := ServStruck.Con.GetPGSQL()
-	// Подключаемся к серверу сообщений
-	ServStruck.StreamConn, err = stan.Connect("test-cluster", "client-123", stan.NatsURL("0.0.0.0:4222"))
-	if err != nil {
-		fmt.Println("Can't connect to cluster", err)
-		err = nil
-	}
-	fmt.Println(time.Now(), "Connected to cluster. Success")
 
 	//Подключаемся к БД
 	ServStruck.Pool, err = pgxpool.Connect(context.TODO(), StringOfConnectionToDataBase)
@@ -39,6 +32,14 @@ func main() {
 	if err != nil {
 		fmt.Println(time.Now(), "caching data going wrong:", err)
 	}
+
+	// Подключаемся к серверу сообщений
+	ServStruck.StreamConn, err = stan.Connect("test-cluster", "client-123", stan.NatsURL("0.0.0.0:4222"))
+	if err != nil {
+		fmt.Println("Can't connect to cluster", err)
+		err = nil
+	}
+	fmt.Println(time.Now(), "Connected to cluster. Success")
 	// Подписка на канал, в который передано дефолтное название и метод для обработки сообщений.
 	ServStruck.StreamSubscribe, err = ServStruck.StreamConn.Subscribe("foo", ServStruck.MesageHandler)
 	if err != nil {
@@ -57,7 +58,7 @@ func main() {
 
 	// вот эту красивую закрывашку Я взял из примеров stan, общий механизм в том, чтобы чтение продолжалось пока Ctrl+С не закроет программу.
 	signalChan := make(chan os.Signal, 1)
-	cleanupDone := make(chan interface{})
+	cleanupDone := make(chan bool)
 	signal.Notify(signalChan, os.Interrupt)
 	go func() { // в отдельной горутине работает отлов сигнала об остановке работы программы
 		// в случае если поймает, то отписывается, закрывает подключение к серверу и отключается от БД
@@ -72,7 +73,7 @@ func main() {
 				fmt.Println(time.Now(), "Closing connection with stream server going wrong", err)
 			}
 			ServStruck.Pool.Close()
-			close(cleanupDone)
+			cleanupDone <- true
 		}
 	}()
 	<-cleanupDone
