@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-// Структуры и методы для работы со входящим json
+// Delivery структура для доставки.
 type Delivery struct {
 	Name    string `json:"name"`
 	Phone   string `json:"phone"`
@@ -26,11 +26,15 @@ type Delivery struct {
 	Email   string `json:"email"`
 }
 
+// NewDeliveryGen метод для генерации структуры доставки,
+// все поля заполняются по определенному правилу
+// псевдослучайными значениями в соответствии с моделью.
 func NewDeliveryGen() *Delivery {
 	var i = rand.Int()
 	return &Delivery{Name: "name" + strconv.Itoa(i), Phone: "phone" + strconv.Itoa(i), Zip: "zip" + strconv.Itoa(i), City: "city" + strconv.Itoa(i), Address: "address" + strconv.Itoa(i), Region: "region" + strconv.Itoa(i), Email: "email" + strconv.Itoa(i)}
 }
 
+//Payment структура для платежей.
 type Payment struct {
 	Transaction  string `json:"transaction"`
 	RequestID    string `json:"request_id"`
@@ -44,11 +48,14 @@ type Payment struct {
 	CustomFee    int    `json:"custom_fee"`
 }
 
+// NewPaymentGen генератор платежей, заполняет поля
+// аналогично, псевдослучайные значения.
 func NewPaymentGen() *Payment {
 	var i = rand.Int()
 	return &Payment{Transaction: "transaction" + strconv.Itoa(i), RequestID: "requestID" + strconv.Itoa(i), Currency: "currency" + strconv.Itoa(i), Provider: "provider" + strconv.Itoa(i), Amount: i, PaymentDt: i, Bank: "bank" + strconv.Itoa(i), DeliveryCost: i, GoodsTotal: i, CustomFee: i}
 }
 
+//Item структура для товаров.
 type Item struct {
 	ChrtID      int    `json:"chrt_id"`
 	TrackNumber string `json:"track_number"`
@@ -63,9 +70,11 @@ type Item struct {
 	Status      int    `json:"status"`
 }
 
+//NewItemsGen главное отличие этого генератора в том,
+// что он возвращает массив структур Item заданной длины.
 func NewItemsGen(number int) []Item {
 	It := make([]Item, number)
-	for number > 0 {
+	for number-1 > 0 {
 		var i = rand.Int()
 		It[number] = Item{ChrtID: i, TrackNumber: "trackNumber" + strconv.Itoa(i), Price: i, Rid: "rid" + strconv.Itoa(i), Name: "name" + strconv.Itoa(i), Sale: i, Size: "size" + strconv.Itoa(i), TotalPrice: i, NmID: i, Brand: "brand" + strconv.Itoa(i), Status: i}
 		number--
@@ -73,6 +82,8 @@ func NewItemsGen(number int) []Item {
 	return It
 }
 
+//Order структура заказа целиком, в нее входят несколько уникальных
+// полей, структуры Payment и Delivery, а также массив Item.
 type Order struct {
 	OrderUID          string    `json:"order_uid"`
 	TrackNumber       string    `json:"track_number"`
@@ -90,6 +101,8 @@ type Order struct {
 	OofShard          string    `json:"oof_shard"`
 }
 
+//NewStrGen генератор заказов, собирает из других генераторов заказ.
+//Массив Item генерируется случайной длины в пределах 10 элементов
 func NewStrGen() *Order {
 	var i = rand.Int()
 	var j = rand.Intn(10)
@@ -99,12 +112,16 @@ func NewStrGen() *Order {
 	return &Order{OrderUID: "orderUID" + strconv.Itoa(i), TrackNumber: "trackNumber" + strconv.Itoa(i), Entry: "entry" + strconv.Itoa(i), Deliveries: *D, Pays: *P, Items: I, Locale: "locale" + strconv.Itoa(i), InternalSignature: "internalSignature" + strconv.Itoa(i), CustomerID: "customerID" + strconv.Itoa(i), DeliveryService: "deliveryService" + strconv.Itoa(i), Shardkey: "shardkey" + strconv.Itoa(i), SmID: i, DateCreated: time.Now().Add(time.Duration(i) * time.Millisecond), OofShard: "oofShard" + strconv.Itoa(i)}
 }
 
-//Кэширование честно сжиженое с хабра
+//ItemForCache структура данных для хранения информации в кэше.
+//Общий скелет взят с харбра, где-то дописано чуток, уже не помню.
 type ItemForCache struct {
 	Value      interface{}
 	Created    time.Time
 	Expiration int64
 }
+
+//Cache работает на структуре данных Map, ключ это OrderUID,
+// а данные это вся остальная часть структуры Order, включая OrderUID.
 type Cache struct {
 	sync.RWMutex
 	defaultExpiration time.Duration
@@ -112,6 +129,7 @@ type Cache struct {
 	items             map[string]ItemForCache
 }
 
+//NewCatch создает мапу и прописывает время хранения данных в ней
 func NewCatch(defaultExpiration, cleanupInterval time.Duration) *Cache {
 	items := make(map[string]ItemForCache)
 	cache := Cache{
@@ -125,6 +143,9 @@ func NewCatch(defaultExpiration, cleanupInterval time.Duration) *Cache {
 	}
 	return &cache
 }
+
+//Set добавляет данные в мапу и присваевает им свои временные значения,
+// проверка на ключ включена, если ключ уже есть в мапе перезаписи не будет.
 func (c *Cache) Set(key string, value interface{}, duration time.Duration) {
 	var expiration int64
 	if duration == 0 {
@@ -146,6 +167,8 @@ func (c *Cache) Set(key string, value interface{}, duration time.Duration) {
 		Created:    time.Now(),
 	}
 }
+
+//Get метод, чтобы вытащить данные из мапы по ключу.
 func (c *Cache) Get(key string) (interface{}, bool) {
 	c.RLock()
 	defer c.RUnlock()
@@ -163,18 +186,24 @@ func (c *Cache) Get(key string) (interface{}, bool) {
 	}
 	return item.Value, true
 }
+
+//Delete удаляет данные по ключу, но так же используется в следующих методах.
 func (c *Cache) Delete(key string) error {
 	c.Lock()
 	defer c.Unlock()
 	if _, found := c.items[key]; !found {
-		return errors.New("Key not found")
+		return errors.New("key not found")
 	}
 	delete(c.items, key)
 	return nil
 }
+
+//StartGC запускает сборщик мусора в отдельной рутине.
 func (c *Cache) StartGC() {
 	go c.GC()
 }
+
+//GC удаляет мусор по времени хранения.
 func (c *Cache) GC() {
 	for {
 		// ожидаем время установленное в cleanupInterval
@@ -189,6 +218,8 @@ func (c *Cache) GC() {
 		}
 	}
 }
+
+//expiredKeys даёт список ключей, у которых закончилось время.
 func (c *Cache) expiredKeys() (keys []string) {
 	c.RLock()
 	defer c.RUnlock()
@@ -199,6 +230,8 @@ func (c *Cache) expiredKeys() (keys []string) {
 	}
 	return
 }
+
+//clearItems чеез метод Delete и массив ключей из expiredKeys удаляет данные из мапы.
 func (c *Cache) clearItems(keys []string) {
 	c.Lock()
 	defer c.Unlock()
@@ -207,6 +240,8 @@ func (c *Cache) clearItems(keys []string) {
 	}
 }
 
+//Connector маленькая структура для подключения к Postgresql.
+//Содержит в себе данные для генерации строки подключения.
 type Connector struct {
 	Uname  string
 	Pass   string
@@ -215,10 +250,13 @@ type Connector struct {
 	Dbname string
 }
 
+//GetPGSQL Собственно метод для генерации строки
 func (con Connector) GetPGSQL() string {
 	return fmt.Sprintf("postgresql://%s:%s@%s:%s/%s", con.Uname, con.Pass, con.Host, con.Port, con.Dbname)
 }
 
+//Skz структура со всем, что может понадобиться по ходу работы программы.
+//Здесь хранится кэш, есть модель заказа, а так же все данные о подключениях.
 type Skz struct {
 	Con             Connector
 	Zakaz           Order
@@ -228,15 +266,15 @@ type Skz struct {
 	StreamSubscribe stan.Subscription
 }
 
+//NewSkz создает новую структуру, передавая туда только конектор
+// и временные интервалы для кэша, остальное проще получить по ходу работы программы, хотя можно и переделать.
 func NewSkz(con Connector, defaultExpiration, cleanupInterval time.Duration) *Skz {
 	return &Skz{Con: con, Cash: NewCatch(defaultExpiration, cleanupInterval)}
 }
 
-func (o *Skz) InitSomeCache() error {
-
-	return nil
-}
-
+//FromDbToCacheByKey метод структуры skz,
+// который может подгрузить в кэш данные из БД,
+// если в заказе есть номер.
 func (o *Skz) FromDbToCacheByKey() error {
 	if o.Zakaz.OrderUID == "" {
 		return fmt.Errorf("key is empty")
@@ -309,6 +347,30 @@ func (o *Skz) FromDbToCacheByKey() error {
 	return nil
 }
 
+//InitSomeCache метод для подгрузки кэша из БД, при запуске работы приложения.
+func (o *Skz) InitSomeCache() error {
+	query := "select orderuid from orders limit (select count(orderuid) from orders)/2"
+	rows, err := o.Pool.Query(context.TODO(), query)
+	if err != nil {
+		fmt.Println(time.Now(), "Query error:", err)
+		return err
+	}
+	for rows.Next() {
+		err = rows.Scan(&o.Zakaz.OrderUID)
+		if err != nil {
+			fmt.Println(time.Now(), "rows Scanning going wrong:", err)
+			return err
+		}
+		err = o.FromDbToCacheByKey()
+		if err != nil {
+			fmt.Println(time.Now(), "Caching data from Db going wrong:", err)
+			return err
+		}
+	}
+	return nil
+}
+
+//MesageHandler обработчик сообщений из стрим канала.
 func (o *Skz) MesageHandler(m *stan.Msg) {
 	err := json.Unmarshal(m.Data, &o.Zakaz)
 	var ResultDelivery, ResultPayment, ResultOrder string
@@ -357,18 +419,21 @@ func (o *Skz) MesageHandler(m *stan.Msg) {
 	}
 }
 
+//OrderHandler обработчик Http запросов.
 func (o *Skz) OrderHandler(Writer http.ResponseWriter, Request *http.Request) {
 	var err error
 	switch Request.Method {
 	case "GET":
-		tmpl, err := template.ParseFiles("interface.html")
+		tmpl, err := template.ParseFiles("client/index.html")
 		if err != nil {
 			http.Error(Writer, err.Error(), 400)
+			fmt.Println(time.Now(), "Template parsing error:", err)
 			return
 		}
 		err = tmpl.Execute(Writer, nil)
 		if err != nil {
 			http.Error(Writer, err.Error(), 400)
+			fmt.Println(time.Now(), "Template execute error:", err)
 			return
 		}
 	case "POST":
@@ -402,7 +467,7 @@ func (o *Skz) OrderHandler(Writer http.ResponseWriter, Request *http.Request) {
 			return
 		}
 		_, err = fmt.Fprintf(Writer, string(JsonValue))
-		fmt.Println(string(JsonValue))
+		fmt.Println(time.Now(), "request to json processed")
 		if err != nil {
 			fmt.Println(time.Now(), "Something wrong with \"fmt.Fprintf\"", err)
 			return

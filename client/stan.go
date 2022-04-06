@@ -13,14 +13,9 @@ import (
 )
 
 func main() {
-	fmt.Println(time.Now(), "Work is begining.")
+	fmt.Println(time.Now(), "Work is beginning.")
 	var err error
-	var ServStruck = libr.NewSkz(libr.Connector{Uname: "postgres", Pass: "1488", Host: "localhost", Port: "5432", Dbname: "wbbase"}, 15*time.Minute, 3*time.Minute)
-	//todo запись в кэш из БД
-	//err = ServStruck.InitSomeCache()
-	if err != nil {
-		fmt.Println(time.Now(), "caching data going wrong:", err)
-	}
+	var ServStruck = libr.NewSkz(libr.Connector{Uname: "postgres", Pass: "postgres", Host: "localhost", Port: "5432", Dbname: "wbbase"}, 15*time.Minute, 3*time.Minute)
 	// собираем из структуры строку для подключения к бд
 	StringOfConnectionToDataBase := ServStruck.Con.GetPGSQL()
 	// Подключаемся к серверу сообщений
@@ -30,6 +25,7 @@ func main() {
 		err = nil
 	}
 	fmt.Println(time.Now(), "Connected to cluster. Success")
+
 	//Подключаемся к БД
 	ServStruck.Pool, err = pgxpool.Connect(context.TODO(), StringOfConnectionToDataBase)
 	if err != nil {
@@ -37,29 +33,34 @@ func main() {
 		err = nil
 	}
 	fmt.Println(time.Now(), "Connected to Database. Success")
-
-	// Подписка на канал в который передано дефолтное название и метод для обработки сообщений.
+	//подсасываем из бд половину данных в кэш, пока там немного строк это не звучит страшно,
+	// но при больших значениях надо будет переделать алгоритм выбора количества записей.
+	err = ServStruck.InitSomeCache()
+	if err != nil {
+		fmt.Println(time.Now(), "caching data going wrong:", err)
+	}
+	// Подписка на канал, в который передано дефолтное название и метод для обработки сообщений.
 	ServStruck.StreamSubscribe, err = ServStruck.StreamConn.Subscribe("foo", ServStruck.MesageHandler)
 	if err != nil {
 		fmt.Println("Can't subscribe to chanel:", err)
 		err = nil
 	}
 	fmt.Println(time.Now(), "Subscribe is done. Succsess")
-	//начинаем писать веб часть ниже
-
-	fmt.Println(time.Now(), "Listening on port: 3000")
+	// через handlefunc передаем наш метод из структуры для работы с БД и Кэшем
 	http.HandleFunc("/", ServStruck.OrderHandler)
 	err = http.ListenAndServe(":3000", nil)
 	if err != nil {
 		fmt.Println(time.Now(), "\"http.ListenAndServe\" have some err to you", err)
 	}
+	//уточняющее сообщение про порт
+	fmt.Println(time.Now(), "Listening on port: 3000")
 
 	// вот эту красивую закрывашку Я взял из примеров stan, общий механизм в том, чтобы чтение продолжалось пока Ctrl+С не закроет программу.
 	signalChan := make(chan os.Signal, 1)
 	cleanupDone := make(chan interface{})
 	signal.Notify(signalChan, os.Interrupt)
 	go func() { // в отдельной горутине работает отлов сигнала об остановке работы программы
-		// в случае если поймает, то отписывается, закрывает подключение к серверу и заканчивает работу
+		// в случае если поймает, то отписывается, закрывает подключение к серверу и отключается от БД
 		for range signalChan {
 			fmt.Println(time.Now(), "Received an interrupt, unsubscribing and closing connection...")
 			err := ServStruck.StreamSubscribe.Unsubscribe()
